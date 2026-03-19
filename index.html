@@ -419,7 +419,7 @@ canvas { display:block; width:100%; }
 
 <script>
 // ── 설정 ──────────────────────────────────────────
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbxKTOJKuGqNDjpHonv7h0ANEjPFViHwPYabJ6yLeh2doZ2mjSeVSR6g9R3S78MeTRdA/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbzzncqE6r1JJdKBQNrARFwHnc5IzE7VdTc8udusFWAyknkuKlAz7oL2hLi_0F1KT80u/exec';
 
 // ── 상태 ──────────────────────────────────────────
 let holdings = [];
@@ -442,21 +442,46 @@ const FX_SYMBOLS = { USD:'$', JPY:'¥', EUR:'€', CNY:'¥' };
 const FX_LABELS = { USD:'달러 ($)', JPY:'엔 (¥)', EUR:'유로 (€)', CNY:'위안 (¥)' };
 const ACCT_COLORS = ['#00e5a0','#6c63ff','#f4b942','#3dd6f5','#ff8c42','#a78bfa'];
 
-// ── API 호출 ──────────────────────────────────────
-async function apiGet(action, params = {}) {
-  const url = new URL(GAS_URL);
-  url.searchParams.set('action', action);
-  Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
-  const res = await fetch(url.toString());
-  return res.json();
+// ── API 호출 (JSONP로 CORS 우회) ─────────────────
+function apiGet(action, params = {}) {
+  return new Promise((resolve, reject) => {
+    const cbName = 'cb_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    const url = new URL(GAS_URL);
+    url.searchParams.set('action', action);
+    url.searchParams.set('callback', cbName);
+    Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+    window[cbName] = (data) => {
+      delete window[cbName];
+      document.head.removeChild(script);
+      resolve(data);
+    };
+    const script = document.createElement('script');
+    script.src = url.toString();
+    script.onerror = () => { delete window[cbName]; reject(new Error('JSONP 실패')); };
+    document.head.appendChild(script);
+    setTimeout(() => { if (window[cbName]) { delete window[cbName]; reject(new Error('timeout')); } }, 30000);
+  });
 }
 
 async function apiPost(action, data) {
-  const res = await fetch(GAS_URL, {
-    method: 'POST',
-    body: JSON.stringify({ action, data })
+  // POST도 GET으로 우회 (GAS는 CORS POST 불가)
+  return new Promise((resolve, reject) => {
+    const cbName = 'cb_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    const url = new URL(GAS_URL);
+    url.searchParams.set('action', action);
+    url.searchParams.set('callback', cbName);
+    url.searchParams.set('data', JSON.stringify(data));
+    window[cbName] = (result) => {
+      delete window[cbName];
+      document.head.removeChild(script);
+      resolve(result);
+    };
+    const script = document.createElement('script');
+    script.src = url.toString();
+    script.onerror = () => { delete window[cbName]; reject(new Error('JSONP 실패')); };
+    document.head.appendChild(script);
+    setTimeout(() => { if (window[cbName]) { delete window[cbName]; reject(new Error('timeout')); } }, 30000);
   });
-  return res.json();
 }
 
 // ── 유틸 ──────────────────────────────────────────
@@ -829,11 +854,8 @@ async function takeSnapshot() {
 async function deleteSnapshot(date) {
   if (!confirm(date + ' 스냅샷을 삭제할까요?')) return;
   try {
-    const result = await apiPost('deleteSnapshot', null);
-    // date를 별도로 전달
-    const res = await fetch(GAS_URL, { method:'POST', body: JSON.stringify({ action:'deleteSnapshot', date }) });
-    const data = await res.json();
-    if (data.ok) { snapshots = data.snapshots; renderHistory(); showToast('삭제됨'); }
+    const result = await apiPost('deleteSnapshot', date);
+    if (result.ok) { snapshots = result.snapshots; renderHistory(); showToast('삭제됨'); }
   } catch(e) { showToast('삭제 실패', true); }
 }
 
