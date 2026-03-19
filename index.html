@@ -442,25 +442,33 @@ const FX_SYMBOLS = { USD:'$', JPY:'¥', EUR:'€', CNY:'¥' };
 const FX_LABELS = { USD:'달러 ($)', JPY:'엔 (¥)', EUR:'유로 (€)', CNY:'위안 (¥)' };
 const ACCT_COLORS = ['#00e5a0','#6c63ff','#f4b942','#3dd6f5','#ff8c42','#a78bfa'];
 
-// ── API 호출 (CORS 프록시) ────────────────────────
-const PROXY = 'https://corsproxy.io/?';
-
+// ── API 호출 ─────────────────────────────────────
 async function apiGet(action, params = {}) {
   const url = new URL(GAS_URL);
   url.searchParams.set('action', action);
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  const res = await fetch(PROXY + encodeURIComponent(url.toString()));
-  return res.json();
+  
+  // 여러 프록시 순차 시도
+  const proxies = [
+    u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+    u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+  ];
+  
+  for (const proxy of proxies) {
+    try {
+      const res = await fetch(proxy(url.toString()), { signal: AbortSignal.timeout(15000) });
+      const text = await res.text();
+      if (text && text.startsWith('{') || text.startsWith('[')) {
+        return JSON.parse(text);
+      }
+    } catch(e) { continue; }
+  }
+  throw new Error('모든 프록시 실패');
 }
 
 async function apiPost(action, data) {
-  const url = new URL(GAS_URL);
-  url.searchParams.set('action', action);
-  if (data !== null && data !== undefined) {
-    url.searchParams.set('data', JSON.stringify(data));
-  }
-  const res = await fetch(PROXY + encodeURIComponent(url.toString()));
-  return res.json();
+  return apiGet(action, data !== null && data !== undefined ? { data: JSON.stringify(data) } : {});
 }
 
 // ── 유틸 ──────────────────────────────────────────
