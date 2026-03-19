@@ -442,46 +442,27 @@ const FX_SYMBOLS = { USD:'$', JPY:'¥', EUR:'€', CNY:'¥' };
 const FX_LABELS = { USD:'달러 ($)', JPY:'엔 (¥)', EUR:'유로 (€)', CNY:'위안 (¥)' };
 const ACCT_COLORS = ['#00e5a0','#6c63ff','#f4b942','#3dd6f5','#ff8c42','#a78bfa'];
 
-// ── API 호출 (JSONP로 CORS 우회) ─────────────────
-function apiGet(action, params = {}) {
-  return new Promise((resolve, reject) => {
-    const cbName = 'cb_' + Date.now() + '_' + Math.random().toString(36).slice(2);
-    const url = new URL(GAS_URL);
-    url.searchParams.set('action', action);
-    url.searchParams.set('callback', cbName);
-    Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-    window[cbName] = (data) => {
-      delete window[cbName];
-      document.head.removeChild(script);
-      resolve(data);
-    };
-    const script = document.createElement('script');
-    script.src = url.toString();
-    script.onerror = () => { delete window[cbName]; reject(new Error('JSONP 실패')); };
-    document.head.appendChild(script);
-    setTimeout(() => { if (window[cbName]) { delete window[cbName]; reject(new Error('timeout')); } }, 30000);
-  });
+// ── API 호출 (CORS 프록시) ────────────────────────
+const PROXY = 'https://api.allorigins.win/get?url=';
+
+async function apiGet(action, params = {}) {
+  const url = new URL(GAS_URL);
+  url.searchParams.set('action', action);
+  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  const res = await fetch(PROXY + encodeURIComponent(url.toString()));
+  const wrapper = await res.json();
+  return JSON.parse(wrapper.contents);
 }
 
 async function apiPost(action, data) {
-  // POST도 GET으로 우회 (GAS는 CORS POST 불가)
-  return new Promise((resolve, reject) => {
-    const cbName = 'cb_' + Date.now() + '_' + Math.random().toString(36).slice(2);
-    const url = new URL(GAS_URL);
-    url.searchParams.set('action', action);
-    url.searchParams.set('callback', cbName);
+  const url = new URL(GAS_URL);
+  url.searchParams.set('action', action);
+  if (data !== null && data !== undefined) {
     url.searchParams.set('data', JSON.stringify(data));
-    window[cbName] = (result) => {
-      delete window[cbName];
-      document.head.removeChild(script);
-      resolve(result);
-    };
-    const script = document.createElement('script');
-    script.src = url.toString();
-    script.onerror = () => { delete window[cbName]; reject(new Error('JSONP 실패')); };
-    document.head.appendChild(script);
-    setTimeout(() => { if (window[cbName]) { delete window[cbName]; reject(new Error('timeout')); } }, 30000);
-  });
+  }
+  const res = await fetch(PROXY + encodeURIComponent(url.toString()));
+  const wrapper = await res.json();
+  return JSON.parse(wrapper.contents);
 }
 
 // ── 유틸 ──────────────────────────────────────────
