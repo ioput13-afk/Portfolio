@@ -528,7 +528,13 @@ async function init() {
     document.getElementById('tab-bar').style.display = '';
     renderAll();
   } catch(e) {
-    showToast('데이터 로드 실패. 새로고침해주세요.', true);
+    document.getElementById('loading').innerHTML = `
+      <div style="text-align:center;padding:20px;color:#ff4d6d">
+        <div style="font-size:2rem;margin-bottom:12px">⚠️</div>
+        <div style="font-size:.85rem;margin-bottom:8px">데이터 로드 실패</div>
+        <div style="font-size:.72rem;color:#6b6b85;margin-bottom:16px">${e.message}</div>
+        <button onclick="location.reload()" style="padding:10px 20px;background:#00e5a0;color:#0a0a0f;border:none;border-radius:10px;font-size:.85rem;cursor:pointer">다시 시도</button>
+      </div>`;
   }
 }
 
