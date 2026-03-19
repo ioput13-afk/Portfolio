@@ -496,16 +496,23 @@ function switchTab(id) {
 // ── 초기화 ───────────────────────────────────────
 async function init() {
   try {
-    const data = await apiGet('getAll');
-    holdings = data.holdings || [];
-    accounts = data.accounts || [];
-    dividendData = data.dividendData || {};
-    snapshots = data.snapshots || [];
+    // 데이터를 나눠서 가져오기 (프록시 1MB 제한 우회)
+    const [holdingsData, accountsData] = await Promise.all([
+      apiGet('getHoldings'),
+      apiGet('getAccounts')
+    ]);
+    holdings = holdingsData || [];
+    accounts = accountsData || [];
+
     document.getElementById('loading').style.display = 'none';
     document.getElementById('main-header').style.display = '';
     document.getElementById('main-content').style.display = '';
     document.getElementById('tab-bar').style.display = '';
     renderAll();
+
+    // 배당/스냅샷은 백그라운드에서 로드
+    apiGet('getDividendData').then(d => { if (d) { dividendData = d; } }).catch(()=>{});
+    apiGet('getSnapshots').then(d => { if (Array.isArray(d)) { snapshots = d; } }).catch(()=>{});
   } catch(e) {
     document.getElementById('loading').innerHTML = `
       <div style="text-align:center;padding:20px;color:#ff4d6d">
